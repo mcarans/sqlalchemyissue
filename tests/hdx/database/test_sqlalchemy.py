@@ -4,12 +4,11 @@ from os.path import join
 from shutil import copyfile
 
 import pytest
+from hdx.database.no_timezone import Base as NoTZBase
 from sqlalchemy import NullPool, create_engine, select
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.decl_api import DeclarativeAttributeIntercept
-
-from hdx.database.no_timezone import Base as NoTZBase
 
 from .dbtestdate import DBTestDate
 
@@ -38,9 +37,9 @@ class TestDatabase:
     def test_get_session(self, nodatabase):
         assert DBTestDate.__tablename__ == "db_test_date"
 
-        engine = create_engine(nodatabase, poolclass=NullPool, echo=False)
-        NoTZBase.metadata.create_all(engine)
-        dbsession = Session(engine)
+        dbengine = create_engine(nodatabase, poolclass=NullPool, echo=False)
+        NoTZBase.metadata.create_all(dbengine)
+        dbsession = Session(dbengine)
         assert str(dbsession.bind.engine.url) == nodatabase
         now = datetime(2022, 10, 20, 22, 35, 55, tzinfo=timezone.utc)
         input_dbtestdate = DBTestDate()
@@ -49,15 +48,17 @@ class TestDatabase:
         dbsession.commit()
         dbtestdate = dbsession.execute(select(DBTestDate)).scalar_one()
         assert dbtestdate.test_date == now
+        dbsession.close()
+        dbengine.dispose()
 
     def test_get_reflect_session(self, database_to_reflect):
-        engine = create_engine(
+        dbengine = create_engine(
             database_to_reflect, poolclass=NullPool, echo=False
         )
         Base = automap_base(declarative_base=NoTZBase)
-        Base.prepare(autoload_with=engine)
-        assert str(engine.url) == database_to_reflect
-        dbsession = Session(engine)
+        Base.prepare(autoload_with=dbengine)
+        assert str(dbengine.url) == database_to_reflect
+        dbsession = Session(dbengine)
         assert isinstance(Base, DeclarativeAttributeIntercept)
         assert str(dbsession.bind.engine.url) == database_to_reflect
         Table1 = Base.classes.table1
@@ -67,3 +68,5 @@ class TestDatabase:
         # with reflection, type annotation maps do not work and hence
         # we don't have a timezone here
         assert row.date1 == datetime(1993, 9, 23, 14, 12, 56, 111000)
+        dbsession.close()
+        dbengine.dispose()
