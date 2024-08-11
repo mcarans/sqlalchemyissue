@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from os.path import join
+from os import remove
+from os.path import exists, join
 from shutil import copyfile
 
 import pytest
@@ -13,17 +14,21 @@ from .dbtestdate import DBTestDate
 
 
 class TestDatabase:
+    dbpath = join("tests", "test_database.db")
+
     @pytest.fixture(scope="function")
     def nodatabase(self):
-        dbpath = join("tests", "test_database.db")
-        return f"sqlite:///{dbpath}"
+        if exists(self.dbpath):
+            remove(self.dbpath)
+        return f"sqlite:///{self.dbpath}"
 
     @pytest.fixture(scope="function")
     def database_to_reflect(self):
         testdb = join("tests", "fixtures", "test.db")
-        reflect_dbpath = join("tests", "test_reflect.db")
-        copyfile(testdb, reflect_dbpath)
-        return f"sqlite:///{reflect_dbpath}"
+        if exists(self.dbpath):
+            remove(self.dbpath)
+        copyfile(testdb, self.dbpath)
+        return f"sqlite:///{self.dbpath}"
 
     def test_get_session(self, nodatabase):
         assert DBTestDate.__tablename__ == "db_test_date"
